@@ -1,14 +1,7 @@
 use bevy::prelude::*;
+use diagnostic_plugin::DiagnosticPlugin;
 
-fn setup(mut commands: Commands) {
-    commands.spawn_bundle(OrthographicCameraBundle::new_2d());
-    commands.spawn_bundle(UiCameraBundle::default());
-    commands.spawn().insert(ForceField{
-        field: |pos| {
-            -pos.distance_squared(Vec2::ZERO)/1_000.0 * pos.signum()
-        }
-    });
-}
+mod diagnostic_plugin;
 
 const PARTICLE_SCALE: f32 = 3.0;
 
@@ -19,9 +12,20 @@ struct ForceField {
     field: fn(Vec2) -> Vec2,
 }
 
+struct ParticleCounter(u32);
+
+fn setup(mut commands: Commands) {
+    commands.spawn_bundle(OrthographicCameraBundle::new_2d());
+    commands.spawn_bundle(UiCameraBundle::default());
+    commands.spawn().insert(ForceField {
+        field: |pos| -pos.distance_squared(Vec2::ZERO) / 1_000.0 * pos.signum(),
+    });
+}
+
 fn update_positions(mut query: Query<(&mut Transform, &Velocity)>, time: Res<Time>) {
     for (mut position, velocity) in query.iter_mut() {
-        position.translation = position.translation + Vec3::new(velocity.0.x, velocity.0.y, 0.0) * time.delta_seconds();
+        position.translation = position.translation
+            + Vec3::new(velocity.0.x, velocity.0.y, 0.0) * time.delta_seconds();
     }
 }
 
@@ -33,7 +37,8 @@ fn update_velocity(
     for (position, mut velocity) in particles.iter_mut() {
         for (force_field,) in force_fields.iter_mut() {
             let position = position.translation;
-            let update = (force_field.field)(Vec2::new(position.x, position.y)) * time.delta_seconds();
+            let update =
+                (force_field.field)(Vec2::new(position.x, position.y)) * time.delta_seconds();
             velocity.0 += update;
             println!("Updated by {}", update);
         }
@@ -45,6 +50,7 @@ fn particle_spawner(
     asset_server: Res<AssetServer>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut spawner: EventReader<ParticleSpawnEvent>,
+    mut counter: ResMut<ParticleCounter>,
 ) {
     for e in spawner.iter() {
         let texture_handle = asset_server.load("rolly_happy.png");
@@ -59,6 +65,7 @@ fn particle_spawner(
                 ..Default::default()
             })
             .insert(Velocity(Vec2::new(0.0, 0.0)));
+        counter.0 += 1;
     }
 }
 
@@ -82,7 +89,9 @@ fn mouse_handler(
 fn main() {
     App::build()
         .add_plugins(DefaultPlugins)
+        .add_plugin(DiagnosticPlugin)
         .add_startup_system(setup.system())
+        .insert_resource(ParticleCounter(0))
         .add_event::<ParticleSpawnEvent>()
         .add_system(mouse_handler.system())
         .add_system(particle_spawner.system())
