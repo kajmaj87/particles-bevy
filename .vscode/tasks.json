@@ -1,0 +1,10 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "shell",
+			"command": "mold -run cargo run --features bevy/dynamic",
+			"label": "rust: cargo run with mold"
+		}
+	]
+}
