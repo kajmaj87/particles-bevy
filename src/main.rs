@@ -37,9 +37,16 @@ fn greet_people(time: Res<Time>, mut timer: ResMut<GreetTimer>, query: Query<&Na
     }
 }
 
-fn main() {
-    App::build()
-        .add_plugins(DefaultPlugins)
+pub fn main() {
+    let mut app = App::build();
+
+    app.add_plugins(DefaultPlugins);
+
+    // when building for Web, use WebGL2 rendering
+    #[cfg(target_arch = "wasm32")]
+    app.add_plugin(bevy_webgl2::WebGL2Plugin);
+
+    app.add_plugins(DefaultPlugins)
         .add_plugin(HelloPlugin)
         .run();
 }

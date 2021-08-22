@@ -2,8 +2,25 @@
 name = "particles-bevy"
 version = "0.1.0"
 edition = "2018"
+resolver = "2"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = [
+  "bevy/bevy_gltf",
+  "bevy/bevy_winit",
+  "bevy/render",
+  "bevy/png",
+  "bevy/wayland"
+]
+
+native = [
+  "bevy/bevy_wgpu",
+]
+
+web = [
+  "bevy_webgl2"
+]
 
 [dependencies]
-bevy = "0.5"
+bevy = {version="0.5.0", default-features=false}
+bevy_webgl2 = {version="0.5.0", optional=true}
