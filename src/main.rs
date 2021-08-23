@@ -22,7 +22,26 @@ struct ForceField {
 
 struct ParticleCounter(u32);
 
-fn setup(mut commands: Commands) {
+struct Materials {
+    particle_neutral: Handle<ColorMaterial>,
+    particle_negative: Handle<ColorMaterial>,
+}
+
+fn setup(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    let texture: Handle<Texture> = asset_server.load("rolly_happy.png");
+
+    commands.insert_resource(Materials {
+        particle_neutral: materials.add(texture.clone().into()),
+        particle_negative: materials.add(ColorMaterial {
+            color: Color::RED,
+            texture: texture.clone().into(),
+        }),
+    });
+
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
     commands.spawn_bundle(UiCameraBundle::default());
     commands
@@ -60,25 +79,18 @@ fn update_velocity(
 
 fn particle_spawner(
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
+    materials: Res<Materials>,
     mut spawner: EventReader<ParticleSpawnEvent>,
     mut counter: ResMut<ParticleCounter>,
 ) {
-    let texture_handle = asset_server.load("rolly_happy.png");
     for e in spawner.iter() {
         let mut new_particle = commands.spawn();
         let particle_material;
 
         match e.particle_type {
-            ParticleType::NEUTRAL => {
-                particle_material = texture_handle.clone_weak().into();
-            }
+            ParticleType::NEUTRAL => particle_material = materials.particle_neutral.clone_weak(),
             ParticleType::NEGATIVE => {
-                particle_material = ColorMaterial {
-                    color: Color::RED,
-                    texture: texture_handle.clone_weak().into(),
-                };
+                particle_material = materials.particle_negative.clone_weak();
                 new_particle.insert(ForceField {
                     field: |pos, center| {
                         1.0 / (1.0 + pos.distance_squared(center))
@@ -90,7 +102,7 @@ fn particle_spawner(
         }
 
         new_particle.insert_bundle(SpriteBundle {
-            material: materials.add(particle_material),
+            material: particle_material,
             transform: Transform {
                 translation: Vec3::new(e.position.x, e.position.y, 0.0),
                 scale: Vec3::splat(PARTICLE_SCALE),
