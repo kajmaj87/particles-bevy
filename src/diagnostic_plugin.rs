@@ -74,14 +74,11 @@ fn fps_counter(
     counter: Res<ParticleCounter>,
     mut query: Query<&mut Text>,
 ) {
-    println!("Inside counter");
     if let Some(fps) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
-        println!("Inside frame");
         if let Some(average) = fps.average() {
             for mut text in query.iter_mut() {
                 text.sections[1].value = format!("{}", counter.0);
                 text.sections[3].value = format!("{:.2}", average);
-                println!("Setting new texts for {} and {}", counter.0, average);
             }
         }
     };

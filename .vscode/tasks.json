@@ -5,6 +5,11 @@
 			"type": "shell",
 			"command": "mold -run cargo run --features bevy/dynamic",
 			"label": "rust: cargo run with mold"
+		},
+		{
+			"type": "shell",
+			"command": "mold -run cargo run --release --features bevy/dynamic",
+			"label": "rust: cargo run release with mold"
 		}
 	]
 }

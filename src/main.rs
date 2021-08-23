@@ -3,13 +3,21 @@ use diagnostic_plugin::DiagnosticPlugin;
 
 mod diagnostic_plugin;
 
-const PARTICLE_SCALE: f32 = 3.0;
+const PARTICLE_SCALE: f32 = 4.0;
 
-struct ParticleSpawnEvent(Vec2);
+enum ParticleType {
+    NEUTRAL,
+    NEGATIVE,
+}
+
+struct ParticleSpawnEvent {
+    position: Vec2,
+    particle_type: ParticleType,
+}
 
 struct Velocity(Vec2);
 struct ForceField {
-    field: fn(Vec2) -> Vec2,
+    field: fn(Vec2, Vec2) -> Vec2,
 }
 
 struct ParticleCounter(u32);
@@ -17,9 +25,12 @@ struct ParticleCounter(u32);
 fn setup(mut commands: Commands) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
     commands.spawn_bundle(UiCameraBundle::default());
-    commands.spawn().insert(ForceField {
-        field: |pos| -pos.distance_squared(Vec2::ZERO) / 1_000.0 * pos.signum(),
-    });
+    commands
+        .spawn()
+        .insert(ForceField {
+            field: |pos, center| -pos.distance_squared(center) / 1_000.0 * (pos - center).signum(),
+        })
+        .insert(Transform::default());
 }
 
 fn update_positions(mut query: Query<(&mut Transform, &Velocity)>, time: Res<Time>) {
@@ -30,17 +41,19 @@ fn update_positions(mut query: Query<(&mut Transform, &Velocity)>, time: Res<Tim
 }
 
 fn update_velocity(
-    mut particles: Query<(&Transform, &mut Velocity)>,
-    mut force_fields: Query<(&ForceField,)>,
+    mut particles: Query<(Entity, &Transform, &mut Velocity)>,
+    mut force_fields: Query<(Entity, &Transform, &ForceField)>,
     time: Res<Time>,
 ) {
-    for (position, mut velocity) in particles.iter_mut() {
-        for (force_field,) in force_fields.iter_mut() {
-            let position = position.translation;
-            let update =
-                (force_field.field)(Vec2::new(position.x, position.y)) * time.delta_seconds();
-            velocity.0 += update;
-            println!("Updated by {}", update);
+    for (particle_ent, position, mut velocity) in particles.iter_mut() {
+        for (force_ent, force_center, force_field) in force_fields.iter_mut() {
+            // particle can also be a source of Force so it should not act on itself
+            if particle_ent != force_ent {
+                let position = Vec2::from(position.translation);
+                let center = Vec2::from(force_center.translation);
+                let update = (force_field.field)(position, center) * time.delta_seconds();
+                velocity.0 += update;
+            }
         }
     }
 }
@@ -52,19 +65,40 @@ fn particle_spawner(
     mut spawner: EventReader<ParticleSpawnEvent>,
     mut counter: ResMut<ParticleCounter>,
 ) {
+    let texture_handle = asset_server.load("rolly_happy.png");
     for e in spawner.iter() {
-        let texture_handle = asset_server.load("rolly_happy.png");
-        commands
-            .spawn_bundle(SpriteBundle {
-                material: materials.add(texture_handle.into()),
-                transform: Transform {
-                    translation: Vec3::new(e.0.x, e.0.y, 0.0),
-                    scale: Vec3::splat(PARTICLE_SCALE),
-                    ..Default::default()
-                },
+        let mut new_particle = commands.spawn();
+        let particle_material;
+
+        match e.particle_type {
+            ParticleType::NEUTRAL => {
+                particle_material = texture_handle.clone_weak().into();
+            }
+            ParticleType::NEGATIVE => {
+                particle_material = ColorMaterial {
+                    color: Color::RED,
+                    texture: texture_handle.clone_weak().into(),
+                };
+                new_particle.insert(ForceField {
+                    field: |pos, center| {
+                        1.0 / (1.0 + pos.distance_squared(center))
+                            * 1_000_000.0
+                            * (pos - center).signum()
+                    },
+                });
+            }
+        }
+
+        new_particle.insert_bundle(SpriteBundle {
+            material: materials.add(particle_material),
+            transform: Transform {
+                translation: Vec3::new(e.position.x, e.position.y, 0.0),
+                scale: Vec3::splat(PARTICLE_SCALE),
                 ..Default::default()
-            })
-            .insert(Velocity(Vec2::new(0.0, 0.0)));
+            },
+            ..Default::default()
+        });
+        new_particle.insert(Velocity(Vec2::ZERO));
         counter.0 += 1;
     }
 }
@@ -78,10 +112,23 @@ fn mouse_handler(
         .get_primary()
         .expect("Primary window does not exist!");
     if mouse_button_input.just_pressed(MouseButton::Left) {
-        println!("click at {:?}", window.cursor_position());
+        println!("click left at {:?}", window.cursor_position());
         if let Some(click_position) = window.cursor_position() {
             let translation = Vec2::new(window.width() / 2.0, window.height() / 2.0);
-            spawner.send(ParticleSpawnEvent(click_position - translation));
+            spawner.send(ParticleSpawnEvent {
+                position: click_position - translation,
+                particle_type: ParticleType::NEUTRAL,
+            });
+        }
+    }
+    if mouse_button_input.just_pressed(MouseButton::Right) {
+        println!("click right at {:?}", window.cursor_position());
+        if let Some(click_position) = window.cursor_position() {
+            let translation = Vec2::new(window.width() / 2.0, window.height() / 2.0);
+            spawner.send(ParticleSpawnEvent {
+                position: click_position - translation,
+                particle_type: ParticleType::NEGATIVE,
+            });
         }
     }
 }
