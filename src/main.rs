@@ -1,52 +1,164 @@
 use bevy::prelude::*;
+use diagnostic_plugin::DiagnosticPlugin;
 
-struct Person;
-struct Name(String);
-pub struct HelloPlugin;
+mod diagnostic_plugin;
 
-struct GreetTimer(Timer);
+const PARTICLE_SCALE: f32 = 4.0;
 
-impl Plugin for HelloPlugin {
-    fn build(&self, app: &mut AppBuilder) {
-        app.insert_resource(GreetTimer(Timer::from_seconds(2.0, true)))
-            .add_startup_system(add_people.system())
-            .add_system(greet_people.system());
+enum ParticleType {
+    NEUTRAL,
+    NEGATIVE,
+}
+
+struct ParticleSpawnEvent {
+    position: Vec2,
+    particle_type: ParticleType,
+}
+
+struct Velocity(Vec2);
+struct ForceField {
+    field: fn(Vec2, Vec2) -> Vec2,
+}
+
+struct ParticleCounter(u32);
+
+struct Materials {
+    particle_neutral: Handle<ColorMaterial>,
+    particle_negative: Handle<ColorMaterial>,
+}
+
+fn setup(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    let texture: Handle<Texture> = asset_server.load("rolly_happy.png");
+
+    commands.insert_resource(Materials {
+        particle_neutral: materials.add(texture.clone().into()),
+        particle_negative: materials.add(ColorMaterial {
+            color: Color::RED,
+            texture: texture.clone().into(),
+        }),
+    });
+
+    commands.spawn_bundle(OrthographicCameraBundle::new_2d());
+    commands.spawn_bundle(UiCameraBundle::default());
+    commands
+        .spawn()
+        .insert(ForceField {
+            field: |pos, center| -pos.distance_squared(center) / 1_000.0 * (pos - center).signum(),
+        })
+        .insert(Transform::default());
+}
+
+fn update_positions(mut query: Query<(&mut Transform, &Velocity)>, time: Res<Time>) {
+    for (mut position, velocity) in query.iter_mut() {
+        position.translation = position.translation
+            + Vec3::new(velocity.0.x, velocity.0.y, 0.0) * time.delta_seconds();
     }
 }
 
-fn add_people(mut commands: Commands) {
-    commands
-        .spawn()
-        .insert(Person)
-        .insert(Name("Elaina Proctor".to_string()));
-    commands
-        .spawn()
-        .insert(Person)
-        .insert(Name("Renzo Hume".to_string()));
-    commands
-        .spawn()
-        .insert(Person)
-        .insert(Name("Zayna Nieves".to_string()));
-}
-
-fn greet_people(time: Res<Time>, mut timer: ResMut<GreetTimer>, query: Query<&Name, With<Person>>) {
-    if timer.0.tick(time.delta()).just_finished() {
-        for name in query.iter() {
-            println!("hello {}!", name.0);
+fn update_velocity(
+    mut particles: Query<(Entity, &Transform, &mut Velocity)>,
+    mut force_fields: Query<(Entity, &Transform, &ForceField)>,
+    time: Res<Time>,
+) {
+    for (particle_ent, position, mut velocity) in particles.iter_mut() {
+        for (force_ent, force_center, force_field) in force_fields.iter_mut() {
+            // particle can also be a source of Force so it should not act on itself
+            if particle_ent != force_ent {
+                let position = Vec2::from(position.translation);
+                let center = Vec2::from(force_center.translation);
+                let update = (force_field.field)(position, center) * time.delta_seconds();
+                velocity.0 += update;
+            }
         }
     }
 }
 
-pub fn main() {
+fn particle_spawner(
+    mut commands: Commands,
+    materials: Res<Materials>,
+    mut spawner: EventReader<ParticleSpawnEvent>,
+    mut counter: ResMut<ParticleCounter>,
+) {
+    for e in spawner.iter() {
+        let mut new_particle = commands.spawn();
+        let particle_material;
+
+        match e.particle_type {
+            ParticleType::NEUTRAL => particle_material = materials.particle_neutral.clone_weak(),
+            ParticleType::NEGATIVE => {
+                particle_material = materials.particle_negative.clone_weak();
+                new_particle.insert(ForceField {
+                    field: |pos, center| {
+                        1.0 / (1.0 + pos.distance_squared(center))
+                            * 1_000_000.0
+                            * (pos - center).signum()
+                    },
+                });
+            }
+        }
+
+        new_particle.insert_bundle(SpriteBundle {
+            material: particle_material,
+            transform: Transform {
+                translation: Vec3::new(e.position.x, e.position.y, 0.0),
+                scale: Vec3::splat(PARTICLE_SCALE),
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        new_particle.insert(Velocity(Vec2::ZERO));
+        counter.0 += 1;
+    }
+}
+
+fn mouse_handler(
+    mouse_button_input: Res<Input<MouseButton>>,
+    windows: Res<Windows>,
+    mut spawner: EventWriter<ParticleSpawnEvent>,
+) {
+    let window = windows
+        .get_primary()
+        .expect("Primary window does not exist!");
+    if mouse_button_input.just_pressed(MouseButton::Left) {
+        println!("click left at {:?}", window.cursor_position());
+        if let Some(click_position) = window.cursor_position() {
+            let translation = Vec2::new(window.width() / 2.0, window.height() / 2.0);
+            spawner.send(ParticleSpawnEvent {
+                position: click_position - translation,
+                particle_type: ParticleType::NEUTRAL,
+            });
+        }
+    }
+    if mouse_button_input.just_pressed(MouseButton::Right) {
+        println!("click right at {:?}", window.cursor_position());
+        if let Some(click_position) = window.cursor_position() {
+            let translation = Vec2::new(window.width() / 2.0, window.height() / 2.0);
+            spawner.send(ParticleSpawnEvent {
+                position: click_position - translation,
+                particle_type: ParticleType::NEGATIVE,
+            });
+        }
+    }
+}
+
+fn main() {
     let mut app = App::build();
+    app.add_plugins(DefaultPlugins)
+        .add_plugin(DiagnosticPlugin)
+        .add_startup_system(setup.system())
+        .insert_resource(ParticleCounter(0))
+        .add_event::<ParticleSpawnEvent>()
+        .add_system(mouse_handler.system())
+        .add_system(particle_spawner.system())
+        .add_system(update_positions.system())
+        .add_system(update_velocity.system());
 
-    app.add_plugins(DefaultPlugins);
-
-    // when building for Web, use WebGL2 rendering
     #[cfg(target_arch = "wasm32")]
     app.add_plugin(bevy_webgl2::WebGL2Plugin);
 
-    app.add_plugins(DefaultPlugins)
-        .add_plugin(HelloPlugin)
-        .run();
+    app.run();
 }
