@@ -18,10 +18,13 @@ struct ForceField {
 
 struct PhysicsStage(SystemStage);
 
+pub struct SimulationSpeed(pub u32);
+
 impl Stage for PhysicsStage {
     fn run(&mut self, world: &mut World) {
         println!("Running Physics stage");
-        for _ in 0..SIMULATION_LOOPS {
+        let loops = world.get_resource::<SimulationSpeed>().unwrap().0;
+        for _ in 0..loops {
             println!("Running simulation frame");
             self.0.run(world);
         }
@@ -32,6 +35,7 @@ impl Plugin for PhysicsPlugin {
     fn build(&self, app: &mut AppBuilder) {
         app.add_startup_system(setup.system())
             .add_system(particle_spawner.system())
+            .insert_resource(SimulationSpeed(1))
             .add_stage_after(
                 CoreStage::Update,
                 "physics",

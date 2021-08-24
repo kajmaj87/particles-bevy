@@ -3,6 +3,8 @@ use bevy::{
     prelude::*,
 };
 
+use crate::physics::SimulationSpeed;
+
 use crate::ParticleCounter;
 
 pub struct DiagnosticPlugin;
@@ -53,6 +55,22 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
                         color: Color::rgb(0.0, 1.0, 1.0),
                     },
                 },
+                TextSection {
+                    value: "\nSimulation Speed: ".to_string(),
+                    style: TextStyle {
+                        font: asset_server.load("fonts/FiraSans-Bold.ttf"),
+                        font_size: FONT_SIZE,
+                        color: Color::rgb(0.0, 1.0, 0.0),
+                    },
+                },
+                TextSection {
+                    value: "".to_string(),
+                    style: TextStyle {
+                        font: asset_server.load("fonts/FiraSans-Bold.ttf"),
+                        font_size: FONT_SIZE,
+                        color: Color::rgb(0.0, 1.0, 1.0),
+                    },
+                },
             ],
             ..Default::default()
         },
@@ -72,6 +90,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 fn fps_counter(
     diagnostics: Res<Diagnostics>,
     counter: Res<ParticleCounter>,
+    speed: Res<SimulationSpeed>,
     mut query: Query<&mut Text>,
 ) {
     if let Some(fps) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
@@ -79,6 +98,7 @@ fn fps_counter(
             for mut text in query.iter_mut() {
                 text.sections[1].value = format!("{}", counter.0);
                 text.sections[3].value = format!("{:.2}", average);
+                text.sections[5].value = format!("{}", speed.0);
             }
         }
     };

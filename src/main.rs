@@ -1,10 +1,9 @@
 use bevy::prelude::*;
 use diagnostic_plugin::DiagnosticPlugin;
-use physics::PhysicsPlugin;
+use physics::{PhysicsPlugin, SimulationSpeed};
 
 mod diagnostic_plugin;
 mod physics;
-
 
 enum ParticleType {
     NEUTRAL,
@@ -15,7 +14,6 @@ struct ParticleSpawnEvent {
     position: Vec2,
     particle_type: ParticleType,
 }
-
 
 struct ParticleCounter(u32);
 
@@ -42,8 +40,6 @@ fn setup(
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
     commands.spawn_bundle(UiCameraBundle::default());
 }
-
-
 
 fn mouse_handler(
     mouse_button_input: Res<Input<MouseButton>>,
@@ -75,6 +71,18 @@ fn mouse_handler(
     }
 }
 
+fn simulation_speed_handler(keys: Res<Input<KeyCode>>, mut simulation_speed: ResMut<SimulationSpeed>) {
+    let speed = simulation_speed.0;
+    if keys.just_pressed(KeyCode::Plus) || keys.just_pressed(KeyCode::NumpadAdd){
+        simulation_speed.0 = speed * 2;
+    }
+    if keys.just_pressed(KeyCode::Minus) || keys.just_pressed(KeyCode::NumpadSubtract) {
+        if speed > 1 {
+            simulation_speed.0 = speed / 2;
+        }
+    }
+}
+
 fn main() {
     App::build()
         .add_plugins(DefaultPlugins)
@@ -84,5 +92,6 @@ fn main() {
         .insert_resource(ParticleCounter(0))
         .add_event::<ParticleSpawnEvent>()
         .add_system(mouse_handler.system())
+        .add_system(simulation_speed_handler.system())
         .run();
 }
