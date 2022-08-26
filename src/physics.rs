@@ -6,9 +6,12 @@ const PARTICLE_SCALE: f32 = 4.0;
 const SIMULATION_LOOPS: u32 = 1;
 pub struct PhysicsPlugin;
 
-struct Velocity(Vec2);
+#[derive(Component)]
+struct Velocity(Vec3);
+
+#[derive(Component)]
 struct ForceField {
-    field: fn(Vec2, Vec2) -> Vec2,
+    field: fn(Vec3, Vec3) -> Vec3,
 }
 
 pub struct SimulationSpeed(pub u32);
@@ -25,16 +28,16 @@ fn simulate_next_frame(mut frames_left: ResMut<FramesToSimulate>) -> ShouldRun {
 }
 
 impl Plugin for PhysicsPlugin {
-    fn build(&self, app: &mut AppBuilder) {
-        app.add_startup_system(setup.system())
-            .add_system(particle_spawner.system())
-            .add_system(simulation_frames.system())
+    fn build(&self, app: &mut App) {
+        app.add_startup_system(setup)
+            .add_system(particle_spawner)
+            .add_system(simulation_frames)
             .add_system_set(
                 SystemSet::new()
                     .label("test")
                     .with_run_criteria(simulate_next_frame)
-                    .with_system(update_positions.system())
-                    .with_system(update_velocity.system())
+                    .with_system(update_positions)
+                    .with_system(update_velocity)
             )
             .insert_resource(SimulationSpeed(1))
             .insert_resource(FramesToSimulate(0));
@@ -71,8 +74,8 @@ fn update_velocity(
         for (force_ent, force_center, force_field) in force_fields.iter_mut() {
             // particle can also be a source of Force so it should not act on itself
             if particle_ent != force_ent {
-                let position = Vec2::from(position.translation);
-                let center = Vec2::from(force_center.translation);
+                let position = position.translation;
+                let center = force_center.translation;
                 let update = (force_field.field)(position, center) * time.delta_seconds();
                 velocity.0 += update;
             }
@@ -113,7 +116,7 @@ fn particle_spawner(
             },
             ..Default::default()
         });
-        new_particle.insert(Velocity(Vec2::ZERO));
+        new_particle.insert(Velocity(Vec3::ZERO));
         counter.0 += 1;
     }
 }

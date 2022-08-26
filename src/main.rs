@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{prelude::*, render::render_resource::Texture};
 use diagnostic_plugin::DiagnosticPlugin;
 use physics::{PhysicsPlugin, SimulationSpeed};
 
@@ -18,8 +18,8 @@ struct ParticleSpawnEvent {
 struct ParticleCounter(u32);
 
 struct Materials {
-    particle_neutral: Handle<ColorMaterial>,
-    particle_negative: Handle<ColorMaterial>,
+    particle_neutral: Handle<MyColorMaterial>,
+    particle_negative: Handle<MyColorMaterial>,
 }
 
 fn setup(
@@ -27,7 +27,7 @@ fn setup(
     asset_server: Res<AssetServer>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    let texture: Handle<Texture> = asset_server.load("rolly_happy.png");
+    let texture = asset_server.load("rolly_happy.png");
 
     commands.insert_resource(Materials {
         particle_neutral: materials.add(texture.clone().into()),
@@ -37,8 +37,7 @@ fn setup(
         }),
     });
 
-    commands.spawn_bundle(OrthographicCameraBundle::new_2d());
-    commands.spawn_bundle(UiCameraBundle::default());
+    commands.spawn_bundle(Camera2dBundle::default());
 }
 
 fn mouse_handler(
@@ -84,14 +83,14 @@ fn simulation_speed_handler(keys: Res<Input<KeyCode>>, mut simulation_speed: Res
 }
 
 fn main() {
-    App::build()
+    App::new()
         .add_plugins(DefaultPlugins)
         .add_plugin(DiagnosticPlugin)
         .add_plugin(PhysicsPlugin)
-        .add_startup_system(setup.system())
+        .add_startup_system(setup)
         .insert_resource(ParticleCounter(0))
         .add_event::<ParticleSpawnEvent>()
-        .add_system(mouse_handler.system())
-        .add_system(simulation_speed_handler.system())
+        .add_system(mouse_handler)
+        .add_system(simulation_speed_handler)
         .run();
 }
