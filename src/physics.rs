@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{ecs::schedule::ShouldRun, prelude::*};
 
 use crate::{Materials, ParticleCounter, ParticleSpawnEvent, ParticleType};
 
@@ -11,16 +11,16 @@ struct ForceField {
     field: fn(Vec2, Vec2) -> Vec2,
 }
 
-struct PhysicsStage(SystemStage);
-
 pub struct SimulationSpeed(pub u32);
 
-impl Stage for PhysicsStage {
-    fn run(&mut self, world: &mut World) {
-        let loops = world.get_resource::<SimulationSpeed>().unwrap().0;
-        for _ in 0..loops {
-            self.0.run(world);
-        }
+struct FramesToSimulate(u32);
+
+fn simulate_next_frame(mut frames_left: ResMut<FramesToSimulate>) -> ShouldRun {
+    if frames_left.0 > 0 {
+        frames_left.0 -= 1;
+        ShouldRun::Yes
+    } else {
+        ShouldRun::No
     }
 }
 
@@ -28,16 +28,16 @@ impl Plugin for PhysicsPlugin {
     fn build(&self, app: &mut AppBuilder) {
         app.add_startup_system(setup.system())
             .add_system(particle_spawner.system())
+            .add_system(simulation_frames.system())
+            .add_system_set(
+                SystemSet::new()
+                    .label("test")
+                    .with_run_criteria(simulate_next_frame)
+                    .with_system(update_positions.system())
+                    .with_system(update_velocity.system())
+            )
             .insert_resource(SimulationSpeed(1))
-            .add_stage_after(
-                CoreStage::Update,
-                "physics",
-                PhysicsStage(
-                    SystemStage::parallel()
-                        .with_system(update_positions.system())
-                        .with_system(update_velocity.system()),
-                ),
-            );
+            .insert_resource(FramesToSimulate(0));
     }
 }
 
@@ -48,6 +48,11 @@ fn setup(mut commands: Commands) {
             field: |pos, center| -pos.distance_squared(center) / 1_000.0 * (pos - center).signum(),
         })
         .insert(Transform::default());
+}
+
+
+fn simulation_frames(speed: Res<SimulationSpeed>, mut frames_left: ResMut<FramesToSimulate>) {
+    frames_left.0 += speed.0;
 }
 
 fn update_positions(mut query: Query<(&mut Transform, &Velocity)>, time: Res<Time>) {
